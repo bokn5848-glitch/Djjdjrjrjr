@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Coin Knight - Full Heal</title>
+    <title>Coin Knight - Instant Action</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; }
-        #game-ui { position: absolute; inset: 0; pointer-events: none; color: white; z-index: 10; display: none; }
+        #game-ui { position: absolute; inset: 0; pointer-events: none; color: white; z-index: 10; display: block; }
         .interactive { pointer-events: auto; }
         canvas { display: block; background: #0f172a; }
         
@@ -60,17 +60,12 @@
         }
     </style>
 </head>
-<body>
-
-<div id="menu-overlay" class="overlay">
-    <h1 class="text-6xl font-black text-amber-500 italic mb-10 drop-shadow-2xl">COIN KNIGHT</h1>
-    <button onclick="startGame()" class="btn-main">CHƠI NGAY</button>
-</div>
+<body onload="startGame()">
 
 <div id="death-overlay" class="overlay" style="display: none;">
     <h2 class="text-4xl font-black text-red-500 mb-4 uppercase italic">Bạn đã chết trong vô vọng</h2>
     <p class="text-zinc-400 mb-10 font-bold uppercase tracking-widest text-xl">MÀN ĐẠT ĐƯỢC: <span id="final-lv" class="text-white">0</span></p>
-    <button onclick="backToMenu()" class="btn-main text-xl">THỬ LẠI</button>
+    <button onclick="location.reload()" class="btn-main text-xl">THỬ LẠI</button>
 </div>
 
 <div id="game-ui">
@@ -129,9 +124,15 @@
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     
-    // --- HỆ THỐNG ÂM THANH ---
     let audioCtx = null;
-    function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    function initAudio() { 
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
 
     function playSfx(type) {
         if (!audioCtx) return;
@@ -206,35 +207,20 @@
         joystick: { active: false, dx: 0, dy: 0 }
     };
 
-    function resetState() {
-        state.level = 1; state.gold = 0;
-        state.player = {
-            ...state.player,
-            x: canvas.width / 2, y: canvas.height / 2,
-            maxHp: 100, hp: 100, damage: 45, defense: 0,
-            swordLevel: 1, armorLevel: 1, angle: 0, attackTimer: 0
-        };
-        state.enemies = []; state.items = []; state.particles = [];
-    }
-
     function startGame() {
-        initAudio();
-        document.getElementById('menu-overlay').style.display = 'none';
-        document.getElementById('death-overlay').style.display = 'none';
-        document.getElementById('game-ui').style.display = 'block';
-        resize(); resetState();
+        // Tự động khởi tạo và bắt đầu
+        resize();
+        state.player.x = canvas.width / 2;
+        state.player.y = canvas.height / 2;
         state.active = true;
-        updateUI(); startLevelFlow();
+        updateUI();
+        startLevelFlow();
     }
 
-    function backToMenu() {
-        document.getElementById('death-overlay').style.display = 'none';
-        document.getElementById('menu-overlay').style.display = 'flex';
-        document.getElementById('game-ui').style.display = 'none';
-        state.active = false;
+    function resize() { 
+        canvas.width = window.innerWidth; 
+        canvas.height = window.innerHeight; 
     }
-
-    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
     window.onresize = resize;
 
     function toggleStore(show) {
@@ -249,7 +235,7 @@
             if (type === 'sword') { state.player.swordLevel++; state.player.damage += 30; }
             else { 
                 state.player.armorLevel++; state.player.defense += 10; state.player.maxHp += 50; 
-                state.player.hp = state.player.maxHp; // Hồi máu khi nâng cấp giáp
+                state.player.hp = state.player.maxHp;
             }
             playSfx('coin'); updateUI();
         }
@@ -272,11 +258,9 @@
         const countEl = document.getElementById('countdown');
         countEl.style.display = "block";
         
-        // HỒI MÁU ĐẦY KHI QUA MÀN MỚI
         if (state.level > 1) {
             state.player.hp = state.player.maxHp;
             playSfx('heal');
-            // Thêm hiệu ứng hạt hồi máu
             for(let i=0; i<15; i++) {
                 state.particles.push({
                     x: state.player.x, y: state.player.y,
@@ -288,12 +272,14 @@
 
         for (let i = 3; i > 0; i--) {
             countEl.innerText = i;
-            playSfx('hit');
+            // Chỉ phát âm thanh nếu audioCtx đã được tạo (thường sau tương tác đầu tiên)
+            if (audioCtx) playSfx('hit');
             await new Promise(r => setTimeout(r, 700));
             if (!state.active) return;
         }
         countEl.style.display = "none";
-        spawnEnemies(); state.gameReady = true; 
+        spawnEnemies(); 
+        state.gameReady = true; 
     }
 
     function spawnEnemies() {
@@ -322,7 +308,7 @@
 
     function drawSword(ctx, ownerRadius, attackProgress) {
         ctx.save();
-        let swordAngle = 0.8; // Trạng thái nghỉ đeo bên hông
+        let swordAngle = 0.8;
         if (attackProgress > 0) {
             swordAngle = 0.8 - (attackProgress * 4);
         }
@@ -366,6 +352,7 @@
     }
 
     function performAttack() {
+        initAudio(); // Đảm bảo âm thanh được bật sau khi chạm
         if (!state.active || state.isStoreOpen || state.player.attackTimer > 0) return;
         state.player.isAttacking = true;
         state.player.attackTimer = 1.0;
@@ -458,7 +445,7 @@
                     en.y += Math.sin(angle) * en.speed;
                     if (dist < 200 && Math.random() < 0.02 && en.kind !== 'speed') { en.state = 'charge'; en.timer = 40; }
                 } else if (en.state === 'charge') {
-                    en.timer--; if (en.timer <= 0) { en.state = 'dash'; en.timer = 15; playSfx('dash'); }
+                    en.timer--; if (en.timer <= 0) { en.state = 'dash'; en.timer = 15; if (audioCtx) playSfx('dash'); }
                 } else if (en.state === 'dash') {
                     en.x += Math.cos(en.angle) * 10; en.y += Math.sin(en.angle) * 10;
                     if (dist < state.player.radius + en.radius + 5) state.player.hp -= 0.5;
@@ -469,13 +456,16 @@
                 if (en.hp <= 0) { state.items.push({ x: en.x, y: en.y, val: 50 + state.level*5, radius: 10 }); state.enemies.splice(i, 1); }
             });
             
-            // Chuyển màn
             if (state.enemies.length === 0) { 
                 state.level++; 
                 startLevelFlow(); 
             }
         }
-        if (state.player.hp <= 0) { state.active = false; document.getElementById('final-lv').innerText = state.level; document.getElementById('death-overlay').style.display = 'flex'; }
+        if (state.player.hp <= 0) { 
+            state.active = false; 
+            document.getElementById('final-lv').innerText = state.level; 
+            document.getElementById('death-overlay').style.display = 'flex'; 
+        }
         updateUI();
     }
 
@@ -514,9 +504,10 @@
             }
             drawEntity(state.player.x, state.player.y, state.player.radius, '#3b82f6', state.player.angle, true, state.player.attackTimer);
         }
-        update(); requestAnimationFrame(draw);
+        update(); 
+        requestAnimationFrame(draw);
     }
     draw();
 </script>
 </body>
-</html>
+    </html>
