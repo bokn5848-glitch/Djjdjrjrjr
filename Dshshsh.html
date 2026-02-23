@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Coin Knight - Full Heal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; }
+        #game-ui { position: absolute; inset: 0; pointer-events: none; color: white; z-index: 10; display: none; }
+        .interactive { pointer-events: auto; }
+        canvas { display: block; background: #0f172a; }
+        
+        .overlay { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95); 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 100; text-align: center;
+        }
+        .btn-main {
+            background: linear-gradient(180deg, #f59e0b, #b45309);
+            padding: 15px 50px; border-radius: 15px; font-weight: 900; font-size: 1.8rem;
+            color: white; border-bottom: 6px solid #78350f; transition: all 0.1s;
+            text-transform: uppercase; cursor: pointer; pointer-events: auto;
+        }
+        .btn-main:active { transform: translateY(4px); border-bottom-width: 2px; }
+
+        .stat-container { background: rgba(15, 23, 42, 0.9); padding: 15px; border-bottom-right-radius: 24px; border-right: 4px solid #fbbf24; border-bottom: 4px solid #fbbf24; backdrop-filter: blur(5px); }
+        .stat-bar { width: 160px; height: 16px; background: #334155; border-radius: 8px; overflow: hidden; border: 2px solid #000; }
+        .hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ef4444, #b91c1c); transition: width 0.3s ease; }
+        
+        .control-area-left { position: absolute; bottom: 40px; left: 40px; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
+        .joystick-base { width: 130px; height: 130px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); position: relative; }
+        .joystick-stick { width: 60px; height: 60px; background: #94a3b8; border-radius: 50%; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 6px 15px rgba(0,0,0,0.5); border: 2px solid #cbd5e1; }
+        
+        .control-area-right { position: absolute; bottom: 50px; right: 50px; }
+        .attack-btn { 
+            width: 120px; height: 120px; 
+            background: radial-gradient(circle, #f87171, #b91c1c); 
+            border-radius: 50%; 
+            display: flex; align-items: center; justify-content: center; 
+            border: 5px solid rgba(255, 255, 255, 0.4); 
+            font-weight: 900; font-size: 1.5rem; color: white;
+            box-shadow: 0 8px 0 #7f1d1d, 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .attack-btn:active { transform: scale(0.95); box-shadow: 0 2px 0 #7f1d1d; }
+
+        #countdown {
+            position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 8rem; font-weight: 900; color: #fbbf24;
+            text-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
+            display: none; pointer-events: none; z-index: 50;
+        }
+
+        #store-modal { display: none; z-index: 60; }
+        .store-content {
+            background: #1e293b; padding: 2rem; border-radius: 2rem; 
+            width: 90%; max-width: 400px; border: 4px solid #fbbf24; 
+            position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+<div id="menu-overlay" class="overlay">
+    <h1 class="text-6xl font-black text-amber-500 italic mb-10 drop-shadow-2xl">COIN KNIGHT</h1>
+    <button onclick="startGame()" class="btn-main">CHƠI NGAY</button>
+</div>
+
+<div id="death-overlay" class="overlay" style="display: none;">
+    <h2 class="text-4xl font-black text-red-500 mb-4 uppercase italic">THẤT BẠI</h2>
+    <p class="text-zinc-400 mb-10 font-bold uppercase tracking-widest text-xl">MÀN ĐẠT ĐƯỢC: <span id="final-lv" class="text-white">0</span></p>
+    <button onclick="backToMenu()" class="btn-main text-xl">THỬ LẠI</button>
+</div>
+
+<div id="game-ui">
+    <div class="stat-container inline-block">
+        <div class="text-yellow-500 font-black italic text-2xl mb-1 drop-shadow-lg uppercase">MÀN <span id="level-val">1</span></div>
+        <div class="flex items-center gap-3">
+            <div class="stat-bar"><div id="hp-bar" class="hp-fill"></div></div>
+            <span id="hp-text" class="text-sm font-black text-white">100%</span>
+        </div>
+        <div class="text-yellow-400 font-bold mt-2 flex items-center gap-2">
+            <span class="text-2xl">💰</span> <span id="gold-val" class="text-xl">0</span>
+        </div>
+    </div>
+
+    <button onclick="toggleStore(true)" class="interactive absolute top-6 right-6 bg-indigo-600 px-6 py-3 rounded-xl font-black border-b-4 border-indigo-900 active:border-b-0 active:translate-y-1 shadow-xl uppercase">Cửa Hàng</button>
+
+    <div id="countdown">3</div>
+
+    <div class="control-area-left">
+        <div class="joystick-base interactive" id="joy-base">
+            <div class="joystick-stick" id="joy-stick"></div>
+        </div>
+    </div>
+    
+    <div class="control-area-right">
+        <button id="attack-btn" class="attack-btn interactive uppercase">ĐÁNH</button>
+    </div>
+
+    <div id="store-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center p-6 interactive">
+        <div class="store-content">
+            <div class="absolute top-4 right-4 text-white font-bold cursor-pointer text-2xl" onclick="toggleStore(false)">✕</div>
+            <h2 class="text-2xl font-black text-center mb-8 text-amber-500 italic uppercase">RÈN LUYỆN</h2>
+            <div class="space-y-4">
+                <div class="flex justify-between items-center bg-slate-800 p-4 rounded-xl">
+                    <div>
+                        <h3 class="font-black text-white italic">KIẾM THUẬT</h3>
+                        <p class="text-xs text-zinc-400">Cấp: <span id="sword-lv">1</span></p>
+                    </div>
+                    <button onclick="upgrade('sword')" class="bg-red-600 px-4 py-2 rounded-lg font-bold"><span id="sword-cost">50</span> 💰</button>
+                </div>
+                <div class="flex justify-between items-center bg-slate-800 p-4 rounded-xl">
+                    <div>
+                        <h3 class="font-black text-white italic">GIÁP TRỤ</h3>
+                        <p class="text-xs text-zinc-400">Cấp: <span id="armor-lv">1</span></p>
+                    </div>
+                    <button onclick="upgrade('armor')" class="bg-blue-600 px-4 py-2 rounded-lg font-bold"><span id="armor-cost">50</span> 💰</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    
+    // --- HỆ THỐNG ÂM THANH ---
+    let audioCtx = null;
+    function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+    function playSfx(type) {
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        if (type === 'attack') {
+            const bufferSize = audioCtx.sampleRate * 0.12;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(6000, now);
+            filter.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+            const gain = audioCtx.createGain();
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+            noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+            noise.start();
+        } else if (type === 'coin' || type === 'heal') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(type === 'heal' ? 440 : 880, now);
+            osc.frequency.exponentialRampToValueAtTime(type === 'heal' ? 880 : 1300, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + (type === 'heal' ? 0.4 : 0.2));
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(now + (type === 'heal' ? 0.4 : 0.2));
+        } else if (type === 'hit') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.exponentialRampToValueAtTime(20, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(now + 0.1);
+        } else if (type === 'dash') {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150, now);
+            osc.frequency.exponentialRampToValueAtTime(600, now + 0.2);
+            gain.gain.setValueAtTime(0.06, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(now + 0.2);
+        }
+    }
+
+    let state = {
+        active: false,
+        level: 1,
+        gold: 0,
+        gameReady: false,
+        isStoreOpen: false,
+        player: {
+            x: 0, y: 0, radius: 26,
+            maxHp: 100, hp: 100,
+            speed: 5.5, damage: 45, defense: 0,
+            attackRange: 100, isAttacking: false,
+            attackTimer: 0,
+            swordLevel: 1, armorLevel: 1,
+            angle: 0
+        },
+        enemies: [],
+        items: [],
+        particles: [],
+        joystick: { active: false, dx: 0, dy: 0 }
+    };
+
+    function resetState() {
+        state.level = 1; state.gold = 0;
+        state.player = {
+            ...state.player,
+            x: canvas.width / 2, y: canvas.height / 2,
+            maxHp: 100, hp: 100, damage: 45, defense: 0,
+            swordLevel: 1, armorLevel: 1, angle: 0, attackTimer: 0
+        };
+        state.enemies = []; state.items = []; state.particles = [];
+    }
+
+    function startGame() {
+        initAudio();
+        document.getElementById('menu-overlay').style.display = 'none';
+        document.getElementById('death-overlay').style.display = 'none';
+        document.getElementById('game-ui').style.display = 'block';
+        resize(); resetState();
+        state.active = true;
+        updateUI(); startLevelFlow();
+    }
+
+    function backToMenu() {
+        document.getElementById('death-overlay').style.display = 'none';
+        document.getElementById('menu-overlay').style.display = 'flex';
+        document.getElementById('game-ui').style.display = 'none';
+        state.active = false;
+    }
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    window.onresize = resize;
+
+    function toggleStore(show) {
+        state.isStoreOpen = show;
+        document.getElementById('store-modal').style.display = show ? 'flex' : 'none';
+    }
+
+    function upgrade(type) {
+        let cost = (type === 'sword' ? state.player.swordLevel : state.player.armorLevel) * 50;
+        if (state.gold >= cost) {
+            state.gold -= cost;
+            if (type === 'sword') { state.player.swordLevel++; state.player.damage += 30; }
+            else { 
+                state.player.armorLevel++; state.player.defense += 10; state.player.maxHp += 50; 
+                state.player.hp = state.player.maxHp; // Hồi máu khi nâng cấp giáp
+            }
+            playSfx('coin'); updateUI();
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('gold-val').innerText = Math.floor(state.gold);
+        document.getElementById('level-val').innerText = state.level;
+        document.getElementById('sword-lv').innerText = state.player.swordLevel;
+        document.getElementById('sword-cost').innerText = state.player.swordLevel * 50;
+        document.getElementById('armor-lv').innerText = state.player.armorLevel;
+        document.getElementById('armor-cost').innerText = state.player.armorLevel * 50;
+        const hpPct = Math.max(0, (state.player.hp / state.player.maxHp * 100));
+        document.getElementById('hp-bar').style.width = hpPct + '%';
+        document.getElementById('hp-text').innerText = Math.ceil(hpPct) + '%';
+    }
+
+    async function startLevelFlow() {
+        state.enemies = []; state.gameReady = false;
+        const countEl = document.getElementById('countdown');
+        countEl.style.display = "block";
+        
+        // HỒI MÁU ĐẦY KHI QUA MÀN MỚI
+        if (state.level > 1) {
+            state.player.hp = state.player.maxHp;
+            playSfx('heal');
+            // Thêm hiệu ứng hạt hồi máu
+            for(let i=0; i<15; i++) {
+                state.particles.push({
+                    x: state.player.x, y: state.player.y,
+                    vx: (Math.random()-0.5)*5, vy: -Math.random()*8,
+                    life: 1.0, color: '#22c55e'
+                });
+            }
+        }
+
+        for (let i = 3; i > 0; i--) {
+            countEl.innerText = i;
+            playSfx('hit');
+            await new Promise(r => setTimeout(r, 700));
+            if (!state.active) return;
+        }
+        countEl.style.display = "none";
+        spawnEnemies(); state.gameReady = true; 
+    }
+
+    function spawnEnemies() {
+        const difficulty = 1 + (state.level * 0.2);
+        const count = 3 + Math.floor(state.level * 1.5);
+        for (let i = 0; i < count; i++) {
+            let ex, ey;
+            do {
+                ex = Math.random() * canvas.width;
+                ey = Math.random() * canvas.height;
+            } while (Math.hypot(ex - state.player.x, ey - state.player.y) < 300);
+
+            const rand = Math.random();
+            let type = { color: '#ef4444', radius: 24, speed: 2.2, hp: 100, dmg: 20, kind: 'stalker' };
+            if (rand > 0.7) type = { color: '#a855f7', radius: 36, speed: 1.4, hp: 300, dmg: 40, kind: 'tank' };
+            else if (rand > 0.5) type = { color: '#22c55e', radius: 18, speed: 3.5, hp: 60, dmg: 15, kind: 'speed' };
+
+            state.enemies.push({
+                x: ex, y: ey, radius: type.radius, color: type.color,
+                hp: type.hp * difficulty, maxHp: type.hp * difficulty,
+                speed: type.speed * (1 + state.level * 0.05), damage: type.dmg * difficulty,
+                kind: type.kind, state: 'follow', timer: 0, angle: 0
+            });
+        }
+    }
+
+    function drawSword(ctx, ownerRadius, attackProgress) {
+        ctx.save();
+        let swordAngle = 0.8; // Trạng thái nghỉ đeo bên hông
+        if (attackProgress > 0) {
+            swordAngle = 0.8 - (attackProgress * 4);
+        }
+        ctx.rotate(swordAngle);
+        const swordLen = ownerRadius * 2.2;
+        const swordWidth = ownerRadius * 0.3;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.shadowBlur = attackProgress > 0 ? 15 : 0;
+        ctx.shadowColor = 'white';
+        ctx.beginPath();
+        ctx.moveTo(ownerRadius * 0.8, -swordWidth/2);
+        ctx.lineTo(ownerRadius * 0.8 + swordLen, 0);
+        ctx.lineTo(ownerRadius * 0.8, swordWidth/2);
+        ctx.fill();
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(ownerRadius * 0.5, -swordWidth * 0.8, ownerRadius * 0.4, swordWidth * 1.6);
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(ownerRadius * 0.2, -swordWidth * 0.4, ownerRadius * 0.6, swordWidth * 0.8);
+        ctx.restore();
+    }
+
+    function drawEntity(x, y, radius, color, angle, isPlayer, attackProgress) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        if (isPlayer) drawSword(ctx, radius, attackProgress);
+        ctx.fillStyle = color;
+        ctx.shadowBlur = 15; ctx.shadowColor = color;
+        ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.shadowBlur = 0;
+        const eyeOffset = radius * 0.4;
+        const eyeSize = radius * 0.2;
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(eyeOffset, -eyeOffset, eyeSize, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(eyeOffset, eyeOffset, eyeSize, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'black';
+        ctx.beginPath(); ctx.arc(eyeOffset + 2, -eyeOffset, eyeSize/2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(eyeOffset + 2, eyeOffset, eyeSize/2, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+    }
+
+    function performAttack() {
+        if (!state.active || state.isStoreOpen || state.player.attackTimer > 0) return;
+        state.player.isAttacking = true;
+        state.player.attackTimer = 1.0;
+        playSfx('attack');
+        if (state.joystick.active) {
+            state.player.x += state.joystick.dx * 30;
+            state.player.y += state.joystick.dy * 30;
+        }
+        state.enemies.forEach(en => {
+            const dist = Math.hypot(en.x - state.player.x, en.y - state.player.y);
+            if (dist < state.player.attackRange + en.radius) {
+                en.hp -= state.player.damage;
+                playSfx('hit');
+                const angle = Math.atan2(en.y - state.player.y, en.x - state.player.x);
+                en.x += Math.cos(angle) * 50; en.y += Math.sin(angle) * 50;
+                for(let k=0; k<5; k++) {
+                    state.particles.push({
+                        x: en.x, y: en.y,
+                        vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10,
+                        life: 1.0, color: en.color
+                    });
+                }
+            }
+        });
+    }
+
+    const joyBase = document.getElementById('joy-base');
+    const joyStick = document.getElementById('joy-stick');
+    const attackBtn = document.getElementById('attack-btn');
+
+    attackBtn.addEventListener('touchstart', e => { e.preventDefault(); performAttack(); });
+    attackBtn.addEventListener('mousedown', e => { e.preventDefault(); performAttack(); });
+    joyBase.addEventListener('touchstart', e => { initAudio(); state.joystick.active = true; handleJoy(e.touches[0]); });
+    window.addEventListener('touchmove', e => {
+        if (!state.joystick.active) return;
+        for(let t of e.touches) if(t.clientX < window.innerWidth/2) handleJoy(t);
+    }, { passive: false });
+    window.addEventListener('touchend', () => {
+        state.joystick.active = false;
+        state.joystick.dx = 0; state.joystick.dy = 0;
+        joyStick.style.left = '50%'; joyStick.style.top = '50%';
+    });
+
+    function handleJoy(touch) {
+        const rect = joyBase.getBoundingClientRect();
+        const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+        const angle = Math.atan2(touch.clientY - cy, touch.clientX - cx);
+        const dist = Math.min(60, Math.hypot(touch.clientX - cx, touch.clientY - cy));
+        state.joystick.dx = Math.cos(angle) * (dist / 60);
+        state.joystick.dy = Math.sin(angle) * (dist / 60);
+        state.player.angle = angle;
+        joyStick.style.left = `calc(50% + ${Math.cos(angle) * dist}px)`;
+        joyStick.style.top = `calc(50% + ${Math.sin(angle) * dist}px)`;
+    }
+
+    function update() {
+        if (!state.active || state.isStoreOpen) return;
+
+        state.player.x += state.joystick.dx * state.player.speed;
+        state.player.y += state.joystick.dy * state.player.speed;
+        state.player.x = Math.max(20, Math.min(canvas.width-20, state.player.x));
+        state.player.y = Math.max(20, Math.min(canvas.height-20, state.player.y));
+
+        if (state.player.attackTimer > 0) {
+            state.player.attackTimer -= 0.15;
+            if (state.player.attackTimer <= 0) {
+                state.player.attackTimer = 0;
+                state.player.isAttacking = false;
+            }
+        }
+
+        state.particles.forEach((p, i) => {
+            p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+            if (p.life <= 0) state.particles.splice(i, 1);
+        });
+
+        state.items.forEach((it, i) => {
+            if (Math.hypot(state.player.x - it.x, state.player.y - it.y) < 50) {
+                state.gold += it.val; playSfx('coin'); state.items.splice(i, 1);
+            }
+        });
+
+        if (state.gameReady) {
+            state.enemies.forEach((en, i) => {
+                const dist = Math.hypot(state.player.x - en.x, state.player.y - en.y);
+                const angle = Math.atan2(state.player.y - en.y, state.player.x - en.x);
+                en.angle = angle;
+                if (en.state === 'follow') {
+                    en.x += Math.cos(angle) * en.speed;
+                    en.y += Math.sin(angle) * en.speed;
+                    if (dist < 200 && Math.random() < 0.02 && en.kind !== 'speed') { en.state = 'charge'; en.timer = 40; }
+                } else if (en.state === 'charge') {
+                    en.timer--; if (en.timer <= 0) { en.state = 'dash'; en.timer = 15; playSfx('dash'); }
+                } else if (en.state === 'dash') {
+                    en.x += Math.cos(en.angle) * 10; en.y += Math.sin(en.angle) * 10;
+                    if (dist < state.player.radius + en.radius + 5) state.player.hp -= 0.5;
+                    en.timer--; if (en.timer <= 0) { en.state = 'cooldown'; en.timer = 40; }
+                } else if (en.state === 'cooldown') { en.timer--; if (en.timer <= 0) en.state = 'follow'; }
+
+                if (dist < state.player.radius + en.radius) state.player.hp -= (en.damage - state.player.defense/2) / 60;
+                if (en.hp <= 0) { state.items.push({ x: en.x, y: en.y, val: 50 + state.level*5, radius: 10 }); state.enemies.splice(i, 1); }
+            });
+            
+            // Chuyển màn
+            if (state.enemies.length === 0) { 
+                state.level++; 
+                startLevelFlow(); 
+            }
+        }
+        if (state.player.hp <= 0) { state.active = false; document.getElementById('final-lv').innerText = state.level; document.getElementById('death-overlay').style.display = 'flex'; }
+        updateUI();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1;
+        for(let x=0; x<canvas.width; x+=60) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+        for(let y=0; y<canvas.height; y+=60) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+        state.items.forEach(it => { ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(it.x, it.y, it.radius, 0, Math.PI*2); ctx.fill(); });
+
+        state.particles.forEach(p => {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 4, 4);
+        });
+        ctx.globalAlpha = 1.0;
+
+        state.enemies.forEach(en => {
+            let color = en.color; if (en.state === 'charge') color = Math.floor(Date.now()/100)%2 ? 'white' : en.color;
+            drawEntity(en.x, en.y, en.radius, color, en.angle, false, 0);
+            const bw = en.radius * 2; ctx.fillStyle = '#000'; ctx.fillRect(en.x - bw/2, en.y - en.radius - 12, bw, 4);
+            ctx.fillStyle = '#ef4444'; ctx.fillRect(en.x - bw/2, en.y - en.radius - 12, (en.hp/en.maxHp)*bw, 4);
+        });
+
+        if (state.active || !state.gameReady) {
+            if (state.player.isAttacking) {
+                ctx.save();
+                ctx.translate(state.player.x, state.player.y);
+                ctx.rotate(state.player.angle);
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(255,255,255, ${state.player.attackTimer * 0.5})`;
+                ctx.lineWidth = state.player.radius * 1.5;
+                ctx.arc(0, 0, state.player.attackRange, -1.2, 1.2);
+                ctx.stroke();
+                ctx.restore();
+            }
+            drawEntity(state.player.x, state.player.y, state.player.radius, '#3b82f6', state.player.angle, true, state.player.attackTimer);
+        }
+        update(); requestAnimationFrame(draw);
+    }
+    draw();
+</script>
+</body>
+</html>
